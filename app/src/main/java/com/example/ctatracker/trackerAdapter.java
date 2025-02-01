@@ -12,34 +12,66 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class trackerAdapter extends RecyclerView.Adapter<trackerViewHolder> {
+    private final MainActivity mainActivity;
+    private final List<Route> displayRouteList;
+    private final List<Route> fullRouteList;
 
-    public List<Route> routeList;
-
-    public trackerAdapter(List<Route> routeList) {
-        this.routeList = routeList;
+    public trackerAdapter(MainActivity mainActivity, List<Route> routeList) {
+        this.mainActivity = mainActivity;
+        this.fullRouteList = new ArrayList<>(routeList);
+        this.displayRouteList = new ArrayList<>(routeList);
     }
-
 
     @NonNull
     @Override
     public trackerViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        com.example.ctatracker.databinding.BusListEntryBinding busListEntryBinding = BusListEntryBinding.inflate
-                (LayoutInflater.from(parent.getContext()),parent,false);
+        BusListEntryBinding busListEntryBinding = BusListEntryBinding.inflate(
+                LayoutInflater.from(parent.getContext()), parent, false);
         return new trackerViewHolder(busListEntryBinding);
     }
 
     @Override
     public void onBindViewHolder(@NonNull trackerViewHolder holder, int position) {
-        holder.bind(routeList.get(position));
+        Route route = displayRouteList.get(position);
+        holder.bind(route);
+
+        holder.itemView.setOnClickListener(v -> {
+            // Call fetchDirections with the route ID
+            mainActivity.fetchDirections(route.getRt(), v);
+        });
     }
 
     @Override
     public int getItemCount() {
-        return routeList.size();
+        return displayRouteList.size();
+    }
+
+    public List<Route> getFullRouteList() {
+        return fullRouteList;
     }
 
     public void setRoutes(List<Route> routes) {
-        routeList = routes;
+        fullRouteList.clear();
+        fullRouteList.addAll(routes);
+        displayRouteList.clear();
+        displayRouteList.addAll(routes);
         notifyDataSetChanged();
+    }
+
+    public void filter(String searchText) {
+        ArrayList<Route> temp = new ArrayList<>();
+        for (Route route : fullRouteList) {
+            if (route.getRt().toLowerCase().contains(searchText.toLowerCase()) ||
+                    route.getRtnm().toLowerCase().contains(searchText.toLowerCase())) {
+                temp.add(route);
+            }
+        }
+
+        int size = displayRouteList.size();
+        displayRouteList.clear();
+        notifyItemRangeRemoved(0, size);
+
+        displayRouteList.addAll(temp);
+        notifyItemRangeChanged(0, displayRouteList.size());
     }
 }

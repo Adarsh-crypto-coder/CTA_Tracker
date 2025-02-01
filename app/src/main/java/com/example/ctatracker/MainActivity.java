@@ -1,9 +1,14 @@
 package com.example.ctatracker;
 
+import android.content.Intent;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Display;
+import android.view.View;
+import android.widget.PopupMenu;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -44,26 +49,38 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState); //CYE7SDQGvNbsRTgz3MjGbyegC
+        super.onCreate(savedInstanceState);
 
-        RequestConfiguration configuration = new RequestConfiguration.Builder()
-                .setTestDeviceIds(Arrays.asList("33BE2250B43518CCDA7DE426D04EE231"))
-                .build();
-        MobileAds.setRequestConfiguration(configuration);
-
-
+        // Initialize binding first
         activityMainBinding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(activityMainBinding.getRoot());
 
+        // Setup RecyclerView and adapter
+        trackerAdapter = new trackerAdapter(this, new ArrayList<>());
         activityMainBinding.recylerView.setLayoutManager(new LinearLayoutManager(this));
+        activityMainBinding.recylerView.setAdapter(trackerAdapter);
+
+        // Set up search functionality
+        activityMainBinding.searchEditText.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+            @Override
+            public void afterTextChanged(Editable editable) {
+                if (trackerAdapter != null) {
+                    trackerAdapter.filter(editable.toString());
+                }
+            }
+        });
+
+        // Setup ads
+        setupAds();
+
+        // Fetch route data
         fetchRoutes();
-
-        MobileAds.initialize(this,initializationStatus -> Log.d(TAG,"onIntitializtiionComp"));
-        adView = new AdView(this);
-        adView.setAdUnitId(adUnitId);
-        activityMainBinding.adViewContainer.addView(adView);
-
-        activityMainBinding.adViewContainer.post(this::loadAdaptiveBanner);
     }
 
     private void loadAdaptiveBanner() {
@@ -108,7 +125,6 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(MainActivity.this,
                     loadAdError.getMessage() + " (Code: " + loadAdError.getCode() + ")",
                     Toast.LENGTH_LONG).show();
-
 
         }
 
@@ -177,10 +193,88 @@ public class MainActivity extends AppCompatActivity {
                     routeList.add(route);
                 }
 
-                trackerAdapter = new trackerAdapter(routeList);
-                activityMainBinding.recylerView.setAdapter(trackerAdapter);
+                trackerAdapter.setRoutes(routeList);
             } catch (JSONException e) {
                 e.printStackTrace();
+            }
+        });
+    }
+
+    private void setupAds() {
+        RequestConfiguration configuration = new RequestConfiguration.Builder()
+                .setTestDeviceIds(Arrays.asList("33BE2250B43518CCDA7DE426D04EE231"))
+                .build();
+        MobileAds.setRequestConfiguration(configuration);
+
+        MobileAds.initialize(this, initializationStatus -> Log.d(TAG, "onInitializationComplete"));
+        adView = new AdView(this);
+        adView.setAdUnitId(adUnitId);
+        activityMainBinding.adViewContainer.addView(adView);
+        activityMainBinding.adViewContainer.post(this::loadAdaptiveBanner);
+    }
+
+    public void fetchDirections(String routeId, View anchorView) {
+        new Thread(() -> {
+            StringBuilder result = new StringBuilder();
+            try {
+                URL url = new URL("https://www.ctabustracker.com/bustime/api/v2/getdirections?key=" + API_KEY + "&rt=" + routeId + "&format=json");
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    result.append(line);
+                }
+                reader.close();
+                conn.disconnect();
+
+                showDirectionsPopup(result.toString(), routeId, anchorView);
+            } catch (Exception e) {
+                e.printStackTrace();
+                runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                        "Failed to fetch directions", Toast.LENGTH_SHORT).show());
+            }
+        }).start();
+    }
+
+    private void showDirectionsPopup(String result, String routeId, View anchorView) {
+        runOnUiThread(() -> {
+            try {
+                JSONObject jsonObject = new JSONObject(result);
+                JSONObject bustimeResponse = jsonObject.getJSONObject("bustime-response");
+                JSONArray directions = bustimeResponse.getJSONArray("directions");
+
+                PopupMenu popup = new PopupMenu(this, anchorView);
+                for (int i = 0; i < directions.length(); i++) {
+                    JSONObject dirObj = directions.getJSONObject(i);
+                    String dir = dirObj.getString("dir");
+                    popup.getMenu().add(dir);
+                }
+
+                popup.setOnMenuItemClickListener(item -> {
+                    // Find the route in the adapter's list
+                    Route selectedRoute = null;
+                    for (Route route : trackerAdapter.getFullRouteList()) {
+                        if (route.getRt().equals(routeId)) {
+                            selectedRoute = route;
+                            break;
+                        }
+                    }
+
+                    if (selectedRoute != null) {
+                        Intent intent = new Intent(MainActivity.this, StopsActivity.class);
+                        intent.putExtra("route_number", selectedRoute.getRt());
+                        intent.putExtra("route_name", selectedRoute.getRtnm());
+                        intent.putExtra("direction", item.getTitle().toString());
+                        startActivity(intent);
+                    }
+                    return true;
+                });
+
+                popup.show();
+            } catch (JSONException e) {
+                e.printStackTrace();
+                Toast.makeText(this, "Failed to parse directions",
+                        Toast.LENGTH_SHORT).show();
             }
         });
     }

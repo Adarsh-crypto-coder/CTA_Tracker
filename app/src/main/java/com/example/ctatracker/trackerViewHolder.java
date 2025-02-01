@@ -22,5 +22,8 @@ public class trackerViewHolder extends RecyclerView.ViewHolder {
         } catch (Exception e) {
             busListEntryBinding.textView.setBackgroundColor(Color.GRAY);
         }
+        itemView.setOnClickListener(v -> {
+            ((MainActivity) v.getContext()).fetchDirections(route.getRt(), v);
+        });
     }
 }
