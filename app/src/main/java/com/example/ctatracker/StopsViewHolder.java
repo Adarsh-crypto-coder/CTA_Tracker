@@ -17,18 +17,16 @@ public class StopsViewHolder extends RecyclerView.ViewHolder {
         super(binding.getRoot());
         this.binding = binding;
         this.listener = listener;
-
-//        binding.getRoot().setOnClickListener(v -> {
-//            int position = getAdapterPosition();
-//            if (position != RecyclerView.NO_POSITION && listener != null) {
-//                listener.onStopClick(stops.get(position));
-//            }
-//        });
     }
 
     public void bind(Stops stop) {
         binding.stopName.setText(stop.getStpnm());
-        String distance = String.format(Locale.US, "%.1f m", stop.getDistance());
-        binding.direction.setText(distance);
+        int distanceInMeters = (int) stop.getDistance();
+
+        String direction = Stops.getCardinalDirection(stop.getBearing());
+
+        String locationInfo = String.format(Locale.US, "%dm %s of your location",
+                distanceInMeters, direction);
+        binding.direction.setText(locationInfo);
     }
 }

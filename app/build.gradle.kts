@@ -42,6 +42,10 @@ dependencies {
     implementation(libs.activity)
     implementation(libs.constraintlayout)
     implementation(libs.play.services.ads)
+    implementation (libs.swiperefreshlayout)
+    implementation ("androidx.core:core-splashscreen:1.0.1")
+    implementation ("com.google.android.material:material:1.9.0")
+//    implementation 'androidx.core:core-splashscreen:1.0.1'
     implementation(libs.play.services.location)
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)

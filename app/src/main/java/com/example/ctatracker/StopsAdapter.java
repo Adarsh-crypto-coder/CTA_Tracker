@@ -1,13 +1,12 @@
 package com.example.ctatracker;
 
+import android.content.Intent;
 import android.view.LayoutInflater;
-import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.example.ctatracker.databinding.BusListEntryBinding;
 import com.example.ctatracker.databinding.StopListEntryBinding;
 
 import java.util.List;
@@ -15,14 +14,22 @@ import java.util.List;
 public class StopsAdapter extends RecyclerView.Adapter<StopsViewHolder> {
     private List<Stops> stops;
     private final OnStopClickListener listener;
+    private final String routeNumber;
+    private final String routeName;
+    private final String direction;
+
 
     public interface OnStopClickListener {
         void onStopClick(Stops stop);
     }
 
-    public StopsAdapter(List<Stops> stops, OnStopClickListener listener) {
+    public StopsAdapter(List<Stops> stops, OnStopClickListener listener, String routeNumber, String routeName, String direction) {
         this.stops = stops;
         this.listener = listener;
+        this.routeNumber = routeNumber;
+        this.routeName = routeName;
+        this.direction = direction;
+
     }
 
     @NonNull
@@ -37,6 +44,15 @@ public class StopsAdapter extends RecyclerView.Adapter<StopsViewHolder> {
     public void onBindViewHolder(@NonNull StopsViewHolder holder, int position) {
         Stops stop = stops.get(position);
         holder.bind(stop);
+        holder.itemView.setOnClickListener(v -> {
+            Intent intent = new Intent(v.getContext(), PredictionsActivity.class);
+            intent.putExtra("route_number", routeNumber);
+            intent.putExtra("route_name", routeName);
+            intent.putExtra("stop_id", stop.getStpid());
+            intent.putExtra("stop_name", stop.getStpnm());
+            intent.putExtra("direction", direction);
+            v.getContext().startActivity(intent);
+        });
     }
 
     @Override

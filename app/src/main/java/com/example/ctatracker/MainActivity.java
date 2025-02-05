@@ -1,6 +1,14 @@
 package com.example.ctatracker;
 
+import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.graphics.Color;
+import android.location.LocationManager;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.net.Uri;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -9,10 +17,19 @@ import android.util.Log;
 import android.view.Display;
 import android.view.View;
 import android.widget.PopupMenu;
+import android.widget.TextView;
 import android.widget.Toast;
+//import android.window.SplashScreen;
 
+import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
 import com.example.ctatracker.databinding.ActivityMainBinding;
@@ -35,6 +52,9 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import androidx.core.splashscreen.SplashScreen;
+import android.Manifest;
+
 
 public class MainActivity extends AppCompatActivity {
 
@@ -47,20 +67,57 @@ public class MainActivity extends AppCompatActivity {
     private static final String adUnitId = "ca-app-pub-3940256099942544/6300978111";
     private static final String TAG = "MainActivity";
 
+    private boolean keepOn = true;
+    private static final long minSplashTime = 2000;
+    private long startTime;
+    private static final int LOCATION_PERMISSION_REQUEST_CODE = 1;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+
+        SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
+
         super.onCreate(savedInstanceState);
 
-        // Initialize binding first
+
+        startTime = System.currentTimeMillis();
+        splashScreen.setKeepOnScreenCondition(() -> {
+            long elapsedTime = System.currentTimeMillis() - startTime;
+            Log.d(TAG, "Splash screen elapsed time: " + elapsedTime);
+            return keepOn || (elapsedTime <= minSplashTime);
+        });
+
+
         activityMainBinding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(activityMainBinding.getRoot());
+        EdgeToEdge.enable(this);
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
+            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
+            return insets;
+        });
 
-        // Setup RecyclerView and adapter
+
+        requestLocationPermission();
+        checkNetworkConnectivity();
+
+
         trackerAdapter = new trackerAdapter(this, new ArrayList<>());
         activityMainBinding.recylerView.setLayoutManager(new LinearLayoutManager(this));
         activityMainBinding.recylerView.setAdapter(trackerAdapter);
 
-        // Set up search functionality
+
+        setupSearchFunctionality();
+
+
+        setupAds();
+        fetchRoutes();
+
+
+        setupInfoButton();
+    }
+
+    private void setupSearchFunctionality() {
         activityMainBinding.searchEditText.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -75,18 +132,166 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         });
+    }
 
-        // Setup ads
+    private void setupInfoButton() {
+        final String url = "https://www.transitchicago.com/developers/bustracker/";
+
+        activityMainBinding.info.setOnClickListener(view -> {
+            AlertDialog dialog = new AlertDialog.Builder(MainActivity.this)
+                    .setIcon(R.drawable.splash_logo)
+                    .setTitle("Bus Tracker - CTA")
+                    .setMessage("CTA Bus Tracker data provided by\n" +
+                            "Chicago Transit Authority\n\n" +
+                            url)
+                    .setPositiveButton("OK", (dialogInterface, which) -> dialogInterface.dismiss())
+                    .setNeutralButton("Open Link", (dialogInterface, which) -> {
+                        Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                        startActivity(browserIntent);
+                    })
+                    .create();
+
+            dialog.show();
+
+            TextView messageView = (TextView) dialog.findViewById(android.R.id.message);
+            if (messageView != null) {
+                messageView.setTextColor(Color.GRAY);
+            }
+        });
+    }
+
+    private void requestLocationPermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, LOCATION_PERMISSION_REQUEST_CODE);
+        } else {
+
+            onLocationPermissionGranted();
+        }
+    }
+
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+
+                onLocationPermissionGranted();
+            } else {
+
+                showRationaleDialog();
+            }
+        }
+    }
+
+    private void showRationaleDialog() {
+        View rootView = activityMainBinding.getRoot();
+        rootView.setBackgroundColor(getResources().getColor(android.R.color.black, getTheme()));
+
+
+        activityMainBinding.toolbar.setVisibility(View.GONE);
+        activityMainBinding.searchInputLayout.setVisibility(View.GONE);
+        activityMainBinding.recylerView.setVisibility(View.GONE);
+        activityMainBinding.adViewContainer.setVisibility(View.GONE);
+        activityMainBinding.info.setVisibility(View.GONE);
+        activityMainBinding.busIcon.setVisibility(View.GONE);
+
+        new AlertDialog.Builder(this)
+                .setIcon(R.drawable.splash_logo)
+                .setTitle("Fine Accuracy Needed")
+                .setMessage("This application needs fine accuracy\npermission in order to determine the\nclosest bus stops to your location. It will\nnot function properly without it. Will you\nallow it?")
+                .setPositiveButton("Yes", (dialog, which) -> requestLocationPermission()) // Re-request permission
+                .setNegativeButton("No Thanks", (dialog, which) -> showFinalRationaleDialog()) // Show final rationale
+                .setCancelable(false)
+                .show();
+    }
+
+    private void showFinalRationaleDialog() {
+        new AlertDialog.Builder(this)
+                .setIcon(R.drawable.splash_logo)
+                .setTitle("Fine Accuracy Needed")
+                .setMessage("This application needs fine accuracy\npermission in order to determine the\nclosest bus stops to your location. It will\nnot function properly without it. Will you\nallow it?")
+                .setPositiveButton("OK", (dialog, which) -> closeApp())
+                .setCancelable(false)
+                .show();
+    }
+
+    private void closeApp() {
+        finishAffinity();
+    }
+
+    private void onLocationPermissionGranted() {
+        View rootView = activityMainBinding.getRoot();
+        rootView.setBackgroundColor(getResources().getColor(R.color.darkgreen, getTheme()));
+
+
+        activityMainBinding.toolbar.setVisibility(View.VISIBLE);
+        activityMainBinding.searchInputLayout.setVisibility(View.VISIBLE);
+        activityMainBinding.recylerView.setVisibility(View.VISIBLE);
+        activityMainBinding.adViewContainer.setVisibility(View.VISIBLE);
+        activityMainBinding.info.setVisibility(View.VISIBLE);
+        activityMainBinding.busIcon.setVisibility(View.VISIBLE);
         setupAds();
-
-        // Fetch route data
         fetchRoutes();
     }
 
+    @Override
+    protected void onStart() {
+        super.onStart();
+
+        checkLocationAvailability();
+        checkNetworkConnectivity();
+    }
+
+        private void checkLocationAvailability() {
+        LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        boolean isLocationEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+                || locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+
+
+            if (!isLocationEnabled) {
+            showLocationRationaleAndClose();
+
+            }
+        }
+
+        private void showLocationRationaleAndClose() {
+
+
+        new AlertDialog.Builder(this)
+                .setTitle("Bus Tracker - CTA")
+                .setMessage("Unable to determine device location. If this\n is an emulator. please set the location")
+                .setCancelable(false)
+                .setPositiveButton("OK", (dialog, which) -> {
+                    finish();
+                })
+                .show();
+        }
+
+    private void checkNetworkConnectivity() {
+        ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo activeNetwork = connectivityManager.getActiveNetworkInfo();
+        if (activeNetwork == null || !activeNetwork.isConnected()) {
+            showNetworkRationaleAndClose();
+        }
+    }
+
+    private void showNetworkRationaleAndClose() {
+
+        new AlertDialog.Builder(this)
+                .setTitle("Bus Tracker - CTA")
+                .setMessage("Unable to contact Bus Tracker API due\n to network problem. Please check\n your network connection")
+                .setCancelable(false)
+                .setPositiveButton("OK", (dialog, which) -> {
+                    finish();
+                })
+                .show();
+    }
+
+
+
     private void loadAdaptiveBanner() {
         AdRequest adRequest = new AdRequest.Builder().build();
-        AdSize adSize = getAdSize();
-        adView.setAdSize(adSize);
         adView.setAdListener(new BannerAdListener());
         adView.loadAd(adRequest);
     }
@@ -99,9 +304,8 @@ public class MainActivity extends AppCompatActivity {
 
         float adWidthPixels = adView.getWidth();
 
-        // If the ad hasn't been laid out, default to the full screen width.
         if (adWidthPixels == 0f) {
-            adWidthPixels = outMetrics.widthPixels;// * 0.75f;
+            adWidthPixels = outMetrics.widthPixels;
         }
 
         float density = getResources().getDisplayMetrics().density;
@@ -110,6 +314,12 @@ public class MainActivity extends AppCompatActivity {
         return AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(this, adWidth);
 
     }
+
+    private void dismissSplashScreen() {
+        keepOn = false;
+    }
+
+
 
     class BannerAdListener extends AdListener {
         @Override
@@ -194,6 +404,7 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 trackerAdapter.setRoutes(routeList);
+                dismissSplashScreen();
             } catch (JSONException e) {
                 e.printStackTrace();
             }
@@ -207,8 +418,11 @@ public class MainActivity extends AppCompatActivity {
         MobileAds.setRequestConfiguration(configuration);
 
         MobileAds.initialize(this, initializationStatus -> Log.d(TAG, "onInitializationComplete"));
+
         adView = new AdView(this);
         adView.setAdUnitId(adUnitId);
+        adView.setAdSize(getAdSize());
+
         activityMainBinding.adViewContainer.addView(adView);
         activityMainBinding.adViewContainer.post(this::loadAdaptiveBanner);
     }
@@ -251,7 +465,7 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 popup.setOnMenuItemClickListener(item -> {
-                    // Find the route in the adapter's list
+
                     Route selectedRoute = null;
                     for (Route route : trackerAdapter.getFullRouteList()) {
                         if (route.getRt().equals(routeId)) {

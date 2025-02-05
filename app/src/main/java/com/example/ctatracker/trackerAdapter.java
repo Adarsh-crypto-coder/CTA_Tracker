@@ -36,7 +36,7 @@ public class trackerAdapter extends RecyclerView.Adapter<trackerViewHolder> {
         holder.bind(route);
 
         holder.itemView.setOnClickListener(v -> {
-            // Call fetchDirections with the route ID
+
             mainActivity.fetchDirections(route.getRt(), v);
         });
     }

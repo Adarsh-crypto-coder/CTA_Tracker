@@ -5,5 +5,5 @@
         <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
     </style>
 
-    <style name="Theme.CTATracker" parent="Base.Theme.CTATracker" />
+    <style name="Theme.CTATracker" parent="Theme.AppCompat.Light.NoActionBar" />
 </resources>
